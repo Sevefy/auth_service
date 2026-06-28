@@ -5,7 +5,7 @@ from asyncpg.exceptions import UniqueViolationError, PostgresError
 
 from app.schemas.user import UserAuthSchema, UserSessionCreateSchema
 from app.utils.hash_pwd import hash_password, verify_password, PasswordNotValidError
-
+import asyncio
 logger = logging.getLogger(__name__)
 
 
@@ -22,7 +22,7 @@ class UserRepository:
             VALUES ($1, $2) 
             RETURNING id;
         """
-        password = hash_password(user_data.password)
+        password = await asyncio.to_thread(hash_password, user_data.password)
         try:
             record: asyncpg.Record | None = await connection.fetchrow(sql, user_data.username, password)
             return record["id"] if record else None
