@@ -1,5 +1,4 @@
 import logging
-from abc import ABC, abstractmethod
 
 from fastapi.requests import Request
 from fastapi.responses import JSONResponse
@@ -8,7 +7,6 @@ from starlette.middleware.base import BaseHTTPMiddleware
 from app.middleware.validate_session import SessionValidationChain
 from app.repository.postgres_session import SessionNotFoundError, TokenExpireError
 from app.schemas.user import UserSession
-
 
 logger = logging.getLogger(__name__)
 
@@ -33,31 +31,29 @@ class SessionMiddleware(BaseHTTPMiddleware):
 
         if not SecurityConfig.is_private(request.url.path):
             return await call_next(request)
-
-        logger.info("Проверка сессии")
-        session_cookie = request.cookies.get("sessionToken")
-        if session_cookie is None:
-            raise Exception("Сессия не найдена в cookie")
-        session_model = UserSession.model_validate_json(session_cookie)
-        logger.info("Пользователь: %s", session_model.model_dump_json())
-        # проверка существования сессии
         try:
+            logger.info("Проверка сессии")
+            session_cookie = request.cookies.get("sessionToken")
+            if session_cookie is None:
+                raise SessionNotFoundError("Сессия не найдена в куках")
+
+            session_model = UserSession.model_validate_json(session_cookie)
+            logger.info("Пользователь: %s", session_model.model_dump_json())
+            # проверка существования сессии
+
             is_valid = await SessionValidationChain(request, session_model).validate()
             if not is_valid:
-                return JSONResponse(
-                    content={
-                        "detail": "Токен не валиден или не найден"
-                    },
-                    status_code=401
-                )
+                raise TokenExpireError("Сессия не найдена или истекла")
 
         except (SessionNotFoundError, TokenExpireError) as exc:
-            return JSONResponse(
+            response_fail = JSONResponse(
                 content={
                     "detail": str(exc)
                 },
                 status_code=401
             )
+            response_fail.delete_cookie("sessionToken")
+            return response_fail
 
-        response = await call_next(request)
-        return response
+        response_next = await call_next(request)
+        return response_next
