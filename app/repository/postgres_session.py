@@ -75,10 +75,15 @@ class PostgresSessionRepository:
         """
 
         try:
+            logger.info(
+                "Поиск сессии пользователя в БД: %s %s %s",
+                session.id, session.token, session.user_id
+            )
+
             record: Record | None = await connection.fetchrow(sql, session.id, session.token, session.user_id)
             if record is None:
                 raise SessionNotFoundError("Сессия не найдена")
-
+            logger.info("Найдена сессия пользователя: %s", record.get("token"))
             return record.get("expire_token", datetime.min).astimezone(ZoneInfo("Europe/Moscow"))
 
         except PostgresError as e:

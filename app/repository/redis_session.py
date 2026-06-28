@@ -29,9 +29,8 @@ class RedisSessionRepository:
     @staticmethod
     async def get_session(connection: redis.Redis, user_data: UserSession) -> bytes | str | None:
         key = generate_key_by_user(user_data)
-        value = user_data.expire_token.strftime("%Y-%m-%d %H:%M:%S %z")
-        logger.info("Redis set cache by key=%s: %s", key, value)
         session = await connection.get(key)
+        logger.info("Redis get cache by key=%s: %s", key, session)
         return session
 
     @staticmethod
