@@ -17,7 +17,7 @@ class SettingsRedis(BaseModel):
         env_prefix=""  # убираем префикс, так как будем использовать вложенность
     )
     host: str = Field(default="localhost")
-    port: int = Field(default=5432)
+    port: int = Field(default=6379)
     user: str = Field(...)
     password: str = Field(...)
 

@@ -29,4 +29,4 @@ def expire_token_check(expire_token: datetime) -> bool:
     current_time = datetime.now(ZoneInfo("Europe/Moscow"))
     logger.info("current_time: %s", current_time)
 
-    return True if current_time < expire_token else False
+    return current_time < expire_token

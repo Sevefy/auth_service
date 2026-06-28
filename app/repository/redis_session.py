@@ -10,7 +10,7 @@ logger = logging.getLogger(__name__)
 
 
 def generate_key_by_user(user: UserSession) -> str:
-    return str(user.__hash__())
+    return str(user.token)
 
 
 class RedisSessionRepository:

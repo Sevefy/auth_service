@@ -66,7 +66,7 @@ async def auth_user(
         status_code=201
     )
 
-    response.set_cookie(key="sessionToken", value=user_session.model_dump_json(indent=None))
+    response.set_cookie(key="sessionToken", value=user_session.model_dump_json(indent=None), httponly=True)
 
     return response
 
@@ -77,16 +77,16 @@ async def logout(
         connection: asyncpg.Connection = Depends(get_db_connection),
         redis_conn: redis.Redis = Depends(get_redis)
 ):
-    try:
-        session_cookie = request.cookies.get("sessionToken")
-        if session_cookie is None:
-            return JSONResponse(content="Сессия не найдена", status_code=200)
+    session_cookie = request.cookies.get("sessionToken")
+    if session_cookie is None:
+        return JSONResponse(content="Сессия не найдена", status_code=200)
 
-        session_model = UserSession.model_validate_json(session_cookie)
-        await PostgresSessionRepository.delete_session(connection, session_model)
-        await RedisSessionRepository.delete_session(redis_conn, session_model)
-    finally:
-        return JSONResponse(
-            content="Сессия закрыта",
-            status_code=200
-        )
+    session_model = UserSession.model_validate_json(session_cookie)
+    await PostgresSessionRepository.delete_session(connection, session_model)
+    await RedisSessionRepository.delete_session(redis_conn, session_model)
+    response = JSONResponse(
+        content="Сессия закрыта",
+        status_code=200
+    )
+    response.delete_cookie("sessionToken")
+    return response

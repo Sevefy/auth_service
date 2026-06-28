@@ -43,19 +43,24 @@ class PostgresValidateSession(ValidateSession):
 
     @staticmethod
     async def validate_session(request: Request, session_user: UserSession) -> bool:
-        pool = request.app.state.db_pool
-        async with pool.acquire() as connection:
+        db_pool = request.app.state.db_pool
+        redis_pool = request.app.state.redis_pool
+        async with db_pool.acquire() as connection:
             expire_token_from_db = await PostgresSessionRepository.find_session(connection, session_user)
 
             if expire_token_from_db is None:
                 return False
+
             logger.info("sessionToken from db: %s", expire_token_from_db)
             if not expire_token_check(expire_token_from_db):
                 await PostgresSessionRepository.delete_session(connection, session_user)
                 return False
+
+            async with redis.Redis(connection_pool=redis_pool) as con:
+                await RedisSessionRepository.set_session(con, session_user)
             return True
 
-class ValidateTokenStrategy:
+class SessionValidationChain:
     def __init__(self, request: Request, session_user: UserSession):
         self.strategies = [
             RedisValidateSession,

@@ -1,6 +1,6 @@
 import logging
 import uuid
-from typing import cast
+from datetime import datetime, timedelta
 from zoneinfo import ZoneInfo
 
 import asyncpg
@@ -9,15 +9,13 @@ from asyncpg.protocol.record import Record
 
 from app.config.settings import settings
 from app.schemas.user import UserSessionCreateSchema, UserSession
-from datetime import datetime, timedelta
-
-from app.utils.hash_pwd import expire_token_check
 
 logger = logging.getLogger(__name__)
 
 
 class SessionNotFoundError(Exception):
     pass
+
 
 class TokenExpireError(Exception):
     pass
@@ -38,7 +36,10 @@ class PostgresSessionRepository:
             record: Record | None = await connection.fetchrow(sql, user_data.id, token, expire_token)
             if record is None or record.get("id") is None:
                 return None
-
+            logger.info(
+                "Postgres create session for %s: %s. Time expire: %s",
+                user_data.username, token, expire_token
+            )
             return UserSession(
                 id=record.get("id"),
                 token=token,
@@ -60,6 +61,7 @@ class PostgresSessionRepository:
 
         try:
             await connection.fetch(sql, session.id)
+            logger.info("Postgres delete session: %s, %s", session.id, session.token)
         except PostgresError as e:
             # PostgresError - базовое исключение для всех ошибок движка PostgreSQL
             logger.error(f"Внутренняя ошибка базы данных: {e}")

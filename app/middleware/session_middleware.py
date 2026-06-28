@@ -5,7 +5,7 @@ from fastapi.requests import Request
 from fastapi.responses import JSONResponse
 from starlette.middleware.base import BaseHTTPMiddleware
 
-from app.middleware.validate_session import ValidateTokenStrategy
+from app.middleware.validate_session import SessionValidationChain
 from app.repository.postgres_session import SessionNotFoundError, TokenExpireError
 from app.schemas.user import UserSession
 
@@ -42,7 +42,7 @@ class SessionMiddleware(BaseHTTPMiddleware):
         logger.info("Пользователь: %s", session_model.model_dump_json())
         # проверка существования сессии
         try:
-            is_valid = await ValidateTokenStrategy(request, session_model).validate()
+            is_valid = await SessionValidationChain(request, session_model).validate()
             if not is_valid:
                 return JSONResponse(
                     content={

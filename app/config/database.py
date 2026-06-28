@@ -4,7 +4,6 @@ from typing import AsyncGenerator
 import asyncpg
 from fastapi import Request, HTTPException, status
 
-from app.config import settings
 from app.config.settings import settings
 
 logger = logging.getLogger(__name__)
