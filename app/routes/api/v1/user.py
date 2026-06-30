@@ -1,19 +1,19 @@
 import logging
 
 import asyncpg
+from asyncpg import UniqueViolationError
 from fastapi import APIRouter, Depends
 from fastapi.requests import Request
 from fastapi.responses import JSONResponse
+from redis import asyncio as redis
 
 from app.config.cache import get_redis
 from app.config.database import get_db_connection
-from app.repository.redis_session import RedisSessionRepository
-from app.repository.postgres_session import PostgresSessionRepository
-from app.repository.user import UserRepository, UserNotFoundError
-from app.schemas.user import UserAuthSchema, UserSessionCreateSchema, UserSession
-from app.utils.hash_pwd import PasswordNotValidError
-from redis import asyncio as redis
-
+from app.repository.postgres_session_repository import PostgresSessionRepository
+from app.repository.redis_session_repository import RedisSessionRepository
+from app.repository.user_repository import UserNotFoundError, UserRepository
+from app.schemas.user import UserAuthSchema, UserSession, UserSessionCreateSchema
+from app.utils.pwd_utils import PasswordNotValidError
 
 logger = logging.getLogger(__name__)
 
@@ -24,13 +24,15 @@ user_router = APIRouter(prefix="/v1/users")
 async def register_user(
         user_data: UserAuthSchema,
         connection: asyncpg.Connection = Depends(get_db_connection)
-):
-    user_id: int | None = await UserRepository.create_user(connection, user_data)
-    if user_id is None:
+) -> JSONResponse:
+    try:
+        user_id: int | None = await UserRepository.create_user(connection, user_data)
+    except UniqueViolationError:
         return JSONResponse(
             content="Пользователь с таким именем уже существует",
             status_code=400
         )
+
     return JSONResponse(
         content=f"Пользователь создан: {user_id}",
         status_code=201
@@ -42,7 +44,7 @@ async def auth_user(
         user_data: UserAuthSchema,
         connection: asyncpg.Connection = Depends(get_db_connection),
         redis_conn: redis.Redis = Depends(get_redis)
-):
+) -> JSONResponse:
     try:
         user: UserSessionCreateSchema = await UserRepository.auth_user(connection, user_data)
         user_session: UserSession | None = await PostgresSessionRepository.create_session(connection, user)
@@ -62,11 +64,11 @@ async def auth_user(
 
     await RedisSessionRepository.set_session(redis_conn, user_session)
     response = JSONResponse(
-        content=f"Пользователь авторизован: {repr(user_session)}",
-        status_code=201
+        content=f"Пользователь прошел аутентификацию: {repr(user_session)}",
+        status_code=200
     )
-
-    response.set_cookie(key="sessionToken", value=user_session.model_dump_json(indent=None), httponly=True)
+    token = str(user_session.token)
+    response.set_cookie(key="sessionToken", value=token, httponly=True)
 
     return response
 
@@ -76,14 +78,13 @@ async def logout(
         request: Request,
         connection: asyncpg.Connection = Depends(get_db_connection),
         redis_conn: redis.Redis = Depends(get_redis)
-):
+) -> JSONResponse:
     session_cookie = request.cookies.get("sessionToken")
     if session_cookie is None:
-        return JSONResponse(content="Сессия не найдена", status_code=200)
+        return JSONResponse(content="Сессия не найдена", status_code=404)
 
-    session_model = UserSession.model_validate_json(session_cookie)
-    await PostgresSessionRepository.delete_session(connection, session_model)
-    await RedisSessionRepository.delete_session(redis_conn, session_model)
+    await PostgresSessionRepository.delete_session(connection, session_cookie)
+    await RedisSessionRepository.delete_session(redis_conn, session_cookie)
     response = JSONResponse(
         content="Сессия закрыта",
         status_code=200

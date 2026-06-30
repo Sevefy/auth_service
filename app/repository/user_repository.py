@@ -1,11 +1,12 @@
+import asyncio
 import logging
 
 import asyncpg
-from asyncpg.exceptions import UniqueViolationError, PostgresError
+from asyncpg.exceptions import PostgresError, UniqueViolationError
 
 from app.schemas.user import UserAuthSchema, UserSessionCreateSchema
-from app.utils.hash_pwd import hash_password, verify_password, PasswordNotValidError
-import asyncio
+from app.utils.pwd_utils import PasswordNotValidError, hash_password, verify_password
+
 logger = logging.getLogger(__name__)
 
 
@@ -24,12 +25,13 @@ class UserRepository:
         """
         password = await asyncio.to_thread(hash_password, user_data.password)
         try:
-            record: asyncpg.Record | None = await connection.fetchrow(sql, user_data.username, password)
+            async with connection.transaction():
+                record: asyncpg.Record | None = await connection.fetchrow(sql, user_data.username, password)
             return record["id"] if record else None
 
-        except UniqueViolationError as e:
+        except UniqueViolationError:
             logger.warning(f"Ошибка регистрации: пользователь '{user_data.username}' уже существует.")
-            return None
+            raise
         except PostgresError as e:
             # PostgresError - базовое исключение для всех ошибок движка PostgreSQL
             logger.error(f"Внутренняя ошибка базы данных: {e}")
@@ -44,7 +46,8 @@ class UserRepository:
         """
 
         try:
-            record: asyncpg.Record | None = await connection.fetchrow(sql, user_data.username)
+            async with connection.transaction():
+                record: asyncpg.Record | None = await connection.fetchrow(sql, user_data.username)
             if record is None:
                 raise UserNotFoundError("Пользователь с таким username не найден")
 

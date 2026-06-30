@@ -1,12 +1,12 @@
-from typing import AsyncGenerator
+from collections.abc import AsyncGenerator
 
 import redis.asyncio as redis
-from fastapi import Request, HTTPException, status
+from fastapi import HTTPException, Request, status
 
 from app.config.settings import settings
 
 
-def init_redis_pool():
+def init_redis_pool() -> redis.ConnectionPool:
     pool = redis.ConnectionPool(
         host=settings.redis.host,
         port=settings.redis.port,
@@ -27,7 +27,7 @@ async def get_redis(request: Request) -> AsyncGenerator[redis.Redis, None]:
     if pool is None:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="Database pool is not initialized"
+            detail="Redis pool is not initialized"
         )
 
     async with redis.Redis(connection_pool=pool) as client:

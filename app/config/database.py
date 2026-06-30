@@ -1,8 +1,8 @@
 import logging
-from typing import AsyncGenerator
+from collections.abc import AsyncGenerator
 
 import asyncpg
-from fastapi import Request, HTTPException, status
+from fastapi import HTTPException, Request, status
 
 from app.config.settings import settings
 

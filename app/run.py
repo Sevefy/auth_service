@@ -1,23 +1,25 @@
-from fastapi import FastAPI
-import uvicorn
+import logging
+from collections.abc import AsyncGenerator
+from contextlib import asynccontextmanager
+from typing import Any
 
-from app.config import database, cache as redis
+import uvicorn
+from fastapi import FastAPI
+
+from app.config import cache as redis
+from app.config import database
 from app.config.logger import config_logging
 from app.config.settings import settings
 from app.middleware.session_middleware import SessionMiddleware
+from app.repository.postgres_session_repository import PostgresSessionRepository
 from app.routes.router import router
-from app.repository.postgres_session import PostgresSessionRepository
-
-
-from contextlib import asynccontextmanager
-import logging
 
 config_logging()
 
 logger = logging.getLogger(__name__)
 
 @asynccontextmanager
-async def lifespan(app_fast_api: FastAPI):
+async def lifespan(app_fast_api: FastAPI) -> AsyncGenerator[None, Any]:
     app_fast_api.state.db_pool = await database.init_db_pool()
     app_fast_api.state.redis_pool = redis.init_redis_pool()
     logger.info("Init DB %s", app_fast_api.state.db_pool)

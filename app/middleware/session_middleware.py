@@ -1,12 +1,12 @@
 import logging
+from typing import Any
 
 from fastapi.requests import Request
 from fastapi.responses import JSONResponse
 from starlette.middleware.base import BaseHTTPMiddleware
 
 from app.middleware.validate_session import SessionValidationChain
-from app.repository.postgres_session import SessionNotFoundError, TokenExpireError
-from app.schemas.user import UserSession
+from app.repository.postgres_session_repository import SessionNotFoundError, TokenExpireError
 
 logger = logging.getLogger(__name__)
 
@@ -24,10 +24,10 @@ class SecurityConfig:
 
 class SessionMiddleware(BaseHTTPMiddleware):
 
-    def __init__(self, app):
+    def __init__(self, app) -> None:
         super().__init__(app)
 
-    async def dispatch(self, request: Request, call_next):
+    async def dispatch(self, request: Request, call_next) -> Any:
 
         if not SecurityConfig.is_private(request.url.path):
             return await call_next(request)
@@ -37,14 +37,11 @@ class SessionMiddleware(BaseHTTPMiddleware):
             if session_cookie is None:
                 raise SessionNotFoundError("Сессия не найдена в куках")
 
-            session_model = UserSession.model_validate_json(session_cookie)
-            logger.info("Пользователь: %s", session_model.model_dump_json())
             # проверка существования сессии
-
-            is_valid = await SessionValidationChain(request, session_model).validate()
-            if not is_valid:
+            user_session = await SessionValidationChain(request, session_cookie).validate()
+            if user_session is None:
                 raise TokenExpireError("Сессия не найдена или истекла")
-
+            request.app.state.user_session = user_session
         except (SessionNotFoundError, TokenExpireError) as exc:
             response_fail = JSONResponse(
                 content={

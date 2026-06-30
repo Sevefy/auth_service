@@ -4,11 +4,11 @@ from datetime import datetime, timedelta
 from zoneinfo import ZoneInfo
 
 import asyncpg
-from asyncpg import PostgresError
+from asyncpg import DataError, PostgresError
 from asyncpg.protocol.record import Record
 
 from app.config.settings import settings
-from app.schemas.user import UserSessionCreateSchema, UserSession
+from app.schemas.user import UserSession, UserSessionCreateSchema
 
 logger = logging.getLogger(__name__)
 
@@ -33,7 +33,8 @@ class PostgresSessionRepository:
             RETURNING id
         """
         try:
-            record: Record | None = await connection.fetchrow(sql, user_data.id, token, expire_token)
+            async with connection.transaction():
+                record: Record | None = await connection.fetchrow(sql, user_data.id, token, expire_token)
             if record is None or record.get("id") is None:
                 return None
             logger.info(
@@ -53,39 +54,53 @@ class PostgresSessionRepository:
             raise
 
     @staticmethod
-    async def delete_session(connection: asyncpg.Connection, session: UserSession) -> None:
+    async def delete_session(connection: asyncpg.Connection, session_token: str) -> None:
         sql = """
             DELETE FROM sessions
-            WHERE id=$1;
+            WHERE token=$1;
         """
 
         try:
-            await connection.fetch(sql, session.id)
-            logger.info("Postgres delete session: %s, %s", session.id, session.token)
+            async with connection.transaction():
+                await connection.execute(sql, session_token)
+            logger.info("Postgres delete session: %s", session_token)
         except PostgresError as e:
             # PostgresError - базовое исключение для всех ошибок движка PostgreSQL
             logger.error(f"Внутренняя ошибка базы данных: {e}")
             raise
 
     @staticmethod
-    async def find_session(connection: asyncpg.Connection, session: UserSession) -> datetime | None:
+    async def find_session(connection: asyncpg.Connection, session_token: str) -> UserSession | None:
         sql = """
-            SELECT id, token, expire_token FROM sessions
-            WHERE id=$1 AND token=$2 AND user_id=$3;
+            SELECT sessions.id, token, expire_token, users.username, user_id 
+            FROM sessions
+            JOIN users ON users.id = user_id
+            WHERE token=$1;
         """
 
         try:
             logger.info(
-                "Поиск сессии пользователя в БД: %s %s %s",
-                session.id, session.token, session.user_id
+                "Поиск сессии пользователя в БД: %s",
+                session_token
             )
-
-            record: Record | None = await connection.fetchrow(sql, session.id, session.token, session.user_id)
+            async with connection.transaction():
+                record: Record | None = await connection.fetchrow(sql, session_token)
             if record is None:
                 raise SessionNotFoundError("Сессия не найдена")
             logger.info("Найдена сессия пользователя: %s", record.get("token"))
-            return record.get("expire_token", datetime.min).astimezone(ZoneInfo("Europe/Moscow"))
 
+            user_session = UserSession(
+                id=record.get("id"),
+                user_id=record.get("user_id"),
+                expire_token=record.get("expire_token", datetime.min).astimezone(ZoneInfo("Europe/Moscow")),
+                token=record.get("token"),
+                username=record.get("username"),
+            )
+
+            return user_session
+        except DataError as e:
+            logger.error("Ошибка в запросе: %s", str(e))
+            return None
         except PostgresError as e:
             # PostgresError - базовое исключение для всех ошибок движка PostgreSQL
             logger.error(f"Внутренняя ошибка базы данных: {e}")
@@ -97,7 +112,8 @@ class PostgresSessionRepository:
             TRUNCATE TABLE sessions CONTINUE IDENTITY RESTRICT;
         """
         try:
-            await connection.fetchrow(sql)
+            async with connection.transaction():
+                await connection.execute(sql)
             logger.info("Sessions TRUNCATE complete!")
         except PostgresError as e:
             # PostgresError - базовое исключение для всех ошибок движка PostgreSQL

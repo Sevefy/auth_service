@@ -1,7 +1,7 @@
 [project]
 name = "auth-service"
 version = "0.1.0"
-description = "Add your description here"
+description = "Практическое задание по созданию сервиса аутентификации"
 readme = "README.md"
 requires-python = ">=3.11"
 dependencies = [
@@ -14,4 +14,70 @@ dependencies = [
     "passlib>=1.7.4",
     "pydantic-settings>=2.14.2",
     "python-dotenv>=1.2.2",
+]
+
+[dependency-groups]
+dev = [
+    "httpx>=0.28.1",
+    "mypy>=2.1.0",
+    "pytest>=9.1.1",
+    "pytest-asyncio>=1.4.0",
+    "pytest-coverage>=0.0",
+    "ruff>=0.15.20",
+    "types-passlib>=1.7.7.20260211",
+]
+
+[tool.ruff]
+line-length = 120
+lint.ignore = ["PLR0913", "RET504", "PLR0912"]
+lint.select = ["E", "F", "UP", "I", "BLE", "T20", "RET", "SIM"]
+exclude = ["*.yaml", "*.yml", "*.pyi"]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/*" = ["PLR0911", "PLR0915"]
+
+[tool.mypy]
+strict = true
+python_version = "3.11"
+warn_unused_ignores = true
+
+[[tool.mypy.overrides]]
+module = ["asyncpg.*"]
+ignore_missing_imports = true
+
+[tool.pytest]
+minversion = "9.0"
+addopts = ["--cov=app","-s","-v"]
+testpaths = [
+    "app/tests",
+]
+asyncio_mode = "strict"
+asyncio_default_fixture_loop_scope = "function"
+# Фильтрация предупреждений
+filterwarnings = [
+    "ignore::DeprecationWarning:passlib.utils",  # Игнорируем предупреждения passlib
+    "ignore::DeprecationWarning:argon2",         # Игнорируем предупреждения argon2
+]
+
+markers = [
+    "user_rep: Тесты репозирория для создания пользователя и аутентификации",
+    "session_rep: Тесты репозирория для управления сессией пользователя",
+    "redis_rep: Тесты Редиса для управления сессией пользователя",
+    "test_api: Тесты API ручек",
+    "test_private_api: Тесты приватных ручек, аутентификация по куке",
+    "test_cache_aside: Тесты что в кэше есть значение сессии",
+]
+
+[tool.coverage.run]
+source = ["app"]
+omit = [
+    # Исключаем тесты
+    "*/tests/*",
+    "*/test_*.py",
+    "*/conftest.py",
+
+    # Исключаем служебные файлы
+    "*/__init__.py",
+    "*/migrations/*",
+
 ]

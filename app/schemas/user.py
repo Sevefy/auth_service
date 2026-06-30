@@ -1,8 +1,8 @@
 from datetime import datetime
 from uuid import UUID
 
-from pydantic import BaseModel, Field, ConfigDict
-from dataclasses import dataclass
+from pydantic import BaseModel, ConfigDict, Field
+
 
 class UserAuthSchema(BaseModel):
     username: str = Field(max_length=50)
